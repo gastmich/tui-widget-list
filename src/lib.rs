@@ -96,7 +96,7 @@
 //! ### Infinite scrolling, scroll padding, horizontal scrolling
 //!
 //!![](examples/tapes/variants.gif?v=1)
-pub(crate) mod legacy;
+//pub(crate) mod legacy;
 pub(crate) mod state;
 pub(crate) mod utils;
 pub(crate) mod view;
@@ -104,8 +104,8 @@ pub(crate) mod view;
 pub use state::ListState;
 pub use view::{ListBuildContext, ListBuilder, ListView, ScrollAxis};
 
-#[allow(deprecated)]
-pub use legacy::{
-    traits::{PreRender, PreRenderContext},
-    widget::List,
-};
+//#[allow(deprecated)]
+//pub use legacy::{
+//    traits::{PreRender, PreRenderContext},
+//    widget::List,
+//};

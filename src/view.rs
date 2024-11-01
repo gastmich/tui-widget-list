@@ -12,7 +12,7 @@ use crate::{utils::layout_on_viewport, ListState};
 #[allow(clippy::module_name_repetitions)]
 pub struct ListView<'a, T> {
     /// The total number of items in the list
-    pub item_count: usize,
+    pub item_count: Vec<usize>,
 
     ///  A `ListBuilder<T>` responsible for constructing the items in the list.
     pub builder: ListBuilder<T>,
@@ -38,6 +38,23 @@ impl<'a, T> ListView<'a, T> {
     /// Creates a new `ListView` with a builder an item count.
     #[must_use]
     pub fn new(builder: ListBuilder<T>, item_count: usize) -> Self {
+        let mut items = Vec::with_capacity(item_count);
+        for _ in 0..item_count {
+            items.push(0);
+        }
+        Self {
+            builder,
+            item_count: items,
+            scroll_axis: ScrollAxis::Vertical,
+            style: Style::default(),
+            block: None,
+            scroll_padding: 0,
+            infinite_scrolling: true,
+        }
+    }
+
+    #[must_use]
+    pub fn with_childs(builder: ListBuilder<T>, item_count: Vec<usize>) -> Self {
         Self {
             builder,
             item_count,
@@ -52,13 +69,13 @@ impl<'a, T> ListView<'a, T> {
     /// Checks whether the widget list is empty.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.item_count == 0
+        self.item_count.is_empty()
     }
 
     /// Returns the length of the widget list.
     #[must_use]
     pub fn len(&self) -> usize {
-        self.item_count
+        self.item_count.len()
     }
 
     /// Sets the block style that surrounds the whole List.
@@ -110,12 +127,12 @@ impl<T> Styled for ListView<'_, T> {
     }
 }
 
-impl<T: Copy + 'static> From<Vec<T>> for ListView<'_, T> {
+impl<T: Copy + 'static> From<Vec<T>> for ListView<'_, T> where Vec<usize>: From<Vec<T>> {
     fn from(value: Vec<T>) -> Self {
-        let item_count = value.len();
+        let item_count = value.clone().into();
         let builder = ListBuilder::new(move |context| (value[context.index], 1));
 
-        ListView::new(builder, item_count)
+        ListView::with_childs(builder, item_count)
     }
 }
 
@@ -125,8 +142,14 @@ pub struct ListBuildContext {
     /// The position of the item in the list.
     pub index: usize,
 
+    /// A boolean flag indicating whether the item is currently expanded.
+    pub is_expanded: bool,
+
     /// A boolean flag indicating whether the item is currently selected.
     pub is_selected: bool,
+
+    /// A boolean flag indicating whether the item is currently selected.
+    pub selected_child: Option<usize>,
 
     /// Defines the axis along which the list can be scrolled.
     pub scroll_axis: ScrollAxis,
@@ -175,7 +198,7 @@ impl<T: Widget> StatefulWidget for ListView<'_, T> {
     type State = ListState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        state.set_num_elements(self.item_count);
+        state.set_num_elements(self.item_count.clone());
         state.set_infinite_scrolling(self.infinite_scrolling);
 
         // Set the base style
@@ -186,7 +209,7 @@ impl<T: Widget> StatefulWidget for ListView<'_, T> {
         let area = self.block.inner_if_some(area);
 
         // List is empty
-        if self.item_count == 0 {
+        if self.item_count.is_empty() {
             return;
         }
 
@@ -207,7 +230,7 @@ impl<T: Widget> StatefulWidget for ListView<'_, T> {
         let mut viewport = layout_on_viewport(
             state,
             &self.builder,
-            self.item_count,
+            self.len(),
             main_axis_size,
             cross_axis_size,
             self.scroll_axis,

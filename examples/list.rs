@@ -34,6 +34,7 @@ struct AppState {
 impl App {
     pub fn run(&self, terminal: &mut Terminal) -> Result<()> {
         let mut state = AppState::default();
+
         loop {
             terminal.draw_app(self, &mut state)?;
 
@@ -45,6 +46,10 @@ impl App {
                         KeyCode::Down | KeyCode::Char('j') => state.text_list_state.next(),
                         KeyCode::Left | KeyCode::Char('h') => state.color_list_state.previous(),
                         KeyCode::Right | KeyCode::Char('l') => state.color_list_state.next(),
+                        KeyCode::Char('E') => state.text_list_state.expand_all(),
+                        KeyCode::Char('e') => state.text_list_state.expand_selected(),
+                        KeyCode::Char('C') => state.text_list_state.collapse_all(),
+                        KeyCode::Char('c') => state.text_list_state.collapse_selected(),
                         _ => {}
                     }
                 }
@@ -81,8 +86,9 @@ impl StatefulWidget for &App {
 pub struct TextContainer {
     title: String,
     content: Vec<String>,
-    style: Style,
     expand: bool,
+    selected: Option<usize>,
+    style: Style,
 }
 
 impl Styled for TextContainer {
@@ -102,8 +108,9 @@ impl TextContainer {
         Self {
             title: title.to_string(),
             content,
-            style: Style::default(),
             expand: false,
+            selected: None,
+            style: Style::default(),
         }
     }
 
@@ -153,6 +160,8 @@ impl TextContainer {
             TextContainer::new("Sunday", sunday),
         ];
 
+        let items: Vec<usize> = containers.iter().map(|item| item.content.len()).collect();
+
         let builder = ListBuilder::new(move |context| {
             let mut main_axis_size = 2;
 
@@ -164,16 +173,25 @@ impl TextContainer {
                 container.style = Style::default().bg(Colors::BLACK);
             }
 
+            container.expand = context.is_expanded;
+            //container.selected = context.selected_child;
+            if container.expand {
+                main_axis_size = 3 + container.content.len() as u16;
+            }
             if context.is_selected {
                 container.style = Style::default().bg(selected_color).fg(Colors::CHARCOAL);
-                container.expand = true;
-                main_axis_size = 3 + container.content.len() as u16;
+                container.expand = context.is_expanded;
+                container.selected = context.selected_child;
+                if container.expand {
+                    // add the size for the lines if the container is expanded
+                    main_axis_size = 3 + container.content.len() as u16;
+                }
             }
 
             (container, main_axis_size)
         });
 
-        ListView::new(builder, 7)
+        ListView::with_childs(builder, items)
     }
 }
 
@@ -182,7 +200,11 @@ impl Widget for TextContainer {
         let mut lines = vec![Line::styled(self.title, self.style)];
         if self.expand {
             lines.push(Line::from(String::new()));
-            lines.extend(self.content.into_iter().map(|x| Line::from(x)));
+            //lines.extend(self.content.into_iter().map(|x| Line::from(x)));
+            lines.extend(self.content.into_iter().enumerate().map(|(index, x)|
+                    if self.selected.is_some_and(|s| s == index) { Line::from(x + " *") }
+                    else { Line::from(x) }
+            ));
             lines.push(Line::from(String::new()));
         }
         Paragraph::new(lines)

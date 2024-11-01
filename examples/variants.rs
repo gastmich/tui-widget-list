@@ -147,7 +147,7 @@ impl StatefulWidget for &App {
             Tab::List => Colors::WHITE,
             _ => Colors::GRAY,
         };
-        match Variant::from_index(state.variant_state.selected.unwrap_or(0)) {
+        match Variant::from_index(state.variant_state.selected.map(|selected| selected.0).unwrap_or(0)) {
             Variant::Classic => PaddedListView::new(false).block(block).fg(fg).render(
                 right,
                 buf,

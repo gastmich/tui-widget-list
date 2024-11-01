@@ -33,13 +33,14 @@ pub(crate) fn layout_on_viewport<T>(
     scroll_padding: u16,
 ) -> HashMap<usize, ViewportElement<T>> {
     // Cache the widgets and sizes to evaluate the builder less often.
-    let mut cacher = WidgetCacher::new(builder, scroll_axis, cross_axis_size, state.selected);
+    let mut cacher = WidgetCacher::new(builder, scroll_axis, cross_axis_size, state.selected, state.expanded.clone());
 
     // The items heights on the viewport will be calculated on the fly.
     let mut viewport: HashMap<usize, ViewportElement<T>> = HashMap::new();
 
     // If none is selected, the first item should be show on top of the viewport.
-    let selected = state.selected.unwrap_or(0);
+    // we need the selected main item
+    let selected = state.selected.map_or(0, |selected| selected.0);
 
     // Calculate the effective scroll padding for each widget
     let effective_scroll_padding_by_index = calculate_effective_scroll_padding(
@@ -339,7 +340,9 @@ fn calculate_effective_scroll_padding<T>(
 
         let context = ListBuildContext {
             index,
-            is_selected: state.selected.map_or(false, |j| index == j),
+            is_expanded: state.is_expanded(index),
+            is_selected: state.is_selected(index),
+            selected_child: state.get_selected_child(index),
             scroll_axis,
             cross_axis_size,
         };
@@ -358,7 +361,9 @@ fn calculate_effective_scroll_padding<T>(
 
         let context = ListBuildContext {
             index,
-            is_selected: state.selected.map_or(false, |j| index == j),
+            is_expanded: state.is_expanded(index),
+            is_selected: state.is_selected(index),
+            selected_child: state.get_selected_child(index),
             scroll_axis,
             cross_axis_size,
         };
@@ -375,7 +380,8 @@ struct WidgetCacher<'a, T> {
     builder: &'a ListBuilder<T>,
     scroll_axis: ScrollAxis,
     cross_axis_size: u16,
-    selected: Option<usize>,
+    selected: Option<(usize, Option<usize>)>,
+    expanded: Vec<usize>,
 }
 
 impl<'a, T> WidgetCacher<'a, T> {
@@ -384,7 +390,8 @@ impl<'a, T> WidgetCacher<'a, T> {
         builder: &'a ListBuilder<T>,
         scroll_axis: ScrollAxis,
         cross_axis_size: u16,
-        selected: Option<usize>,
+        selected: Option<(usize, Option<usize>)>,
+        expanded: Vec<usize>,
     ) -> Self {
         Self {
             cache: HashMap::new(),
@@ -392,12 +399,20 @@ impl<'a, T> WidgetCacher<'a, T> {
             scroll_axis,
             cross_axis_size,
             selected,
+            expanded,
         }
     }
 
     // Gets the widget and the height. Removes the widget from the cache.
     fn get(&mut self, index: usize) -> (T, u16) {
-        let is_selected = self.selected.map_or(false, |j| index == j);
+        let (is_selected, selected_child) = match self.selected {
+            Some(selected) => {
+                if selected.0 == index { (true, selected.1) }
+                else { (false, None) }
+            },
+            None => (false, None),
+        };
+        let is_expanded = self.expanded.iter().find(|&&x| x == index).is_some();
         // Check if the widget is already in cache
         if let Some((widget, main_axis_size)) = self.cache.remove(&index) {
             return (widget, main_axis_size);
@@ -406,7 +421,9 @@ impl<'a, T> WidgetCacher<'a, T> {
         // Create the context for the builder
         let context = ListBuildContext {
             index,
+            is_expanded,
             is_selected,
+            selected_child,
             scroll_axis: self.scroll_axis,
             cross_axis_size: self.cross_axis_size,
         };
@@ -419,7 +436,14 @@ impl<'a, T> WidgetCacher<'a, T> {
 
     // Gets the height.
     fn get_height(&mut self, index: usize) -> u16 {
-        let is_selected = self.selected.map_or(false, |j| index == j);
+        let (is_selected, selected_child) = match self.selected {
+            Some(selected) => {
+                if selected.0 == index { (true, selected.1) }
+                else { (false, None) }
+            },
+            None => (false, None),
+        };
+        let is_expanded = self.expanded.iter().find(|&&x| x == index).is_some();
         // Check if the widget is already in cache
         if let Some(&(_, main_axis_size)) = self.cache.get(&index) {
             return main_axis_size;
@@ -428,7 +452,9 @@ impl<'a, T> WidgetCacher<'a, T> {
         // Create the context for the builder
         let context = ListBuildContext {
             index,
+            is_expanded,
             is_selected,
+            selected_child,
             scroll_axis: self.scroll_axis,
             cross_axis_size: self.cross_axis_size,
         };
@@ -524,7 +550,8 @@ mod tests {
     fn happy_path() {
         // given
         let mut state = ListState {
-            num_elements: 2,
+            //num_elements: 2,
+            num_elements: [0;2].into(),
             ..ListState::default()
         };
         let given_item_count = 2;
@@ -581,8 +608,10 @@ mod tests {
             first_truncated: 1,
         };
         let mut state = ListState {
-            num_elements: 3,
-            selected: Some(0),
+            //num_elements: 3,
+            //selected: Some(0),
+            num_elements: [0;3].into(),
+            selected: Some((0, None)),
             view_state,
             ..ListState::default()
         };
@@ -636,8 +665,10 @@ mod tests {
     fn scroll_down() {
         // given
         let mut state = ListState {
-            num_elements: 2,
-            selected: Some(1),
+            //num_elements: 2,
+            //selected: Some(1),
+            num_elements: [2;0].into(),
+            selected: Some((1, None)),
             ..ListState::default()
         };
         let given_sizes = vec![2, 2];
@@ -693,8 +724,10 @@ mod tests {
     fn scroll_padding_bottom() {
         // given
         let mut state = ListState {
-            num_elements: 3,
-            selected: Some(1),
+            //num_elements: 3,
+            //selected: Some(1),
+            num_elements: [3;0].into(),
+            selected: Some((1, None)),
             ..ListState::default()
         };
         let given_sizes = vec![2, 2, 2];
@@ -755,8 +788,10 @@ mod tests {
             first_truncated: 0,
         };
         let mut state = ListState {
-            num_elements: 3,
-            selected: Some(1),
+            //num_elements: 3,
+            //selected: Some(1),
+            num_elements: [3;0].into(),
+            selected: Some((1, None)),
             view_state,
             ..ListState::default()
         };
@@ -815,8 +850,10 @@ mod tests {
             first_truncated: 0,
         };
         let mut state = ListState {
-            num_elements: 3,
-            selected: Some(0),
+            //num_elements: 3,
+            //selected: Some(0),
+            num_elements: [3;0].into(),
+            selected: Some((0, None)),
             view_state,
             ..ListState::default()
         };
@@ -880,8 +917,10 @@ mod tests {
             first_truncated: 1,
         };
         let mut state = ListState {
-            num_elements: 3,
-            selected: Some(1),
+            //num_elements: 3,
+            //selected: Some(1),
+            num_elements: [3;0].into(),
+            selected: Some((1, None)),
             view_state,
             ..ListState::default()
         };
